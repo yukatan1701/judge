@@ -148,14 +148,14 @@ char **get_user_list()
 	return user_list;
 }
 
-void print_user_list(char **user_list)
+void print_list(char **user_list)
 {
 	if (user_list == NULL) {
 		puts("No users found.");
 		exit(1);
 	}
-	for (char **cur = user_list; *cur; cur++)
-		puts(*cur);
+	for (int i = 0; user_list[i]; i++)
+		puts(user_list[i]);
 }
 
 char *generate_file_path(char *contest_name, char *username, char letter)
@@ -197,18 +197,20 @@ char *generate_output_path(char *contest_name, char letter)
 void free_buffer()
 {
 	char ch;
-	while ((ch = fgetc(stdin)) != EOF)
+	while ((ch = getchar()) != EOF)
 		;
 }
 
-void run_tests(char *contest_name, char **user_list, Settings set)
+char **run_tests(char *contest_name, char **user_list, Settings set, const char alphabet[])
 {
-	char *results = malloc(sizeof(char) * (set.problems) + 1);
-	if (results == NULL)
-		allocation_error();
-	const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-	for (char **cur_user = user_list; *cur_user; cur_user++) {
-		for (int i = 0; i < set.problems && i < sizeof(alphabet) - 1; i++) {
+	char **results_list = NULL;
+	int user_num = 0;
+	for (char **cur_user = user_list; *cur_user; cur_user++, user_num++) {
+		char *result = malloc(sizeof(char) * (set.problems + 1));
+		if (result == NULL)
+			allocation_error();
+		memset(result, 0, set.problems + 1);
+		for (int i = 0; i < set.problems && i < strlen(alphabet) - 1; i++) {
 			char *user_file_path = generate_file_path(contest_name, *cur_user, alphabet[i]);
 			char *output_path = generate_output_path(contest_name, alphabet[i]);
 			int fd[2];
@@ -218,28 +220,63 @@ void run_tests(char *contest_name, char **user_list, Settings set)
 				close(fd[0]);
 				dup2(fd[1], 1);
 				close(fd[1]);
-				execl("test_tmp", user_file_path, output_path, NULL);
+				char *tmp = malloc(10);
+				memset(tmp, 0, 9);
+				tmp[0] = (char) i;
+				if (execl("test_tmp", tmp, user_file_path, output_path, NULL) < 0) {
+					perror("Failed to run tests");
+					exit(1);
+				}
 			}
 			close(fd[1]);
 			dup2(fd[0], 0);
 			close(fd[0]);
 			int status = 0;
 			wait(&status);
-
-			memset(results, 0, set.problems + 1);
-			fgets(results, set.problems, stdin);
-			puts(results);
+			if (WEXITSTATUS(status) != 0) {
+				puts("Tests stopped.");
+				exit(1);
+			}
+			char child_answer = getchar();
+			result[i] = child_answer;
 			free_buffer();
-			/*puts(user_file_path);
-			puts(output_path);
-			puts("------------");*/
 		}
+		results_list = realloc(results_list, (user_num + 2) * sizeof(char *));
+		results_list[user_num] = result;
+		results_list[user_num + 1] = NULL;
 	}
-	free(results);
+	return results_list;
 }
 
-int main(int argc, char *args[])
+void free_settings(Settings set)
 {
+	if (set.score)
+		free(set.score);
+	set.score = NULL;
+}
+
+void generate_results_file(char **user_list, char **results_list, Settings set, const char alphabet[])
+{
+	FILE *csv = fopen("results.csv", "w");
+	if (csv == NULL) {
+		perror("Failed to open results.csv");
+		exit(1);
+	}
+	fprintf(csv, "user,");
+	for (int i = 0; i < set.problems; i++)
+		fprintf(csv, "%c,", alphabet[i]);
+	fprintf(csv, "Sum\n");
+	for (int i = 0; user_list[i]; i++) {
+		fprintf(csv, "%s,", user_list[i]);
+		for (int j = 0; j < set.problems; j++)
+			fprintf(csv, "%c,", results_list[i][j]);
+		fprintf(csv, "%d\n", -1);
+	}
+	fclose(csv);
+}
+
+int main(int argc, char *args[]){
+	const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 	char *contest_name = args[1];
 	if (contest_name == NULL) {
 		puts("Contest name not found.");
@@ -248,9 +285,12 @@ int main(int argc, char *args[])
 	Settings set = init_settings(contest_name);
 	print_settings(set);
 	char **user_list = get_user_list();
-	print_user_list(user_list);
-	run_tests(contest_name, user_list, set);
-	//TODO: free_settings();
-	//TODO: free_user_list();
+	print_list(user_list);
+	char **results_list = run_tests(contest_name, user_list, set, alphabet);
+	print_list(results_list);
+	generate_results_file(user_list, results_list, set, alphabet);
+	free_settings(set);
+	free(user_list);
+	//TODO: free_results_list
 	return 0;
 }
