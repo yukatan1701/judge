@@ -275,7 +275,7 @@ void generate_results_file(char **user_list, char **results_list, Settings set, 
 	fclose(csv);
 }
 
-int main(int argc, char *args[]){
+int main(int argc, char *args[]) {
 	const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 	char *contest_name = args[1];
 	if (contest_name == NULL) {
