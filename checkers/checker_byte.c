@@ -66,6 +66,5 @@ int main(int argc, char * argv[]) {
             }
         }
     }
-    printf("%d", status);
     return status;
 }
