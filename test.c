@@ -124,52 +124,92 @@ char * correct_ans_name(int i, char * program_tests) {
     return test;
 }
 
-void launch_tests(char * program_name, char * program_tests, Settings set) {
+char * set_checker(Settings set) {
+    int len = strlen(set.checker) + strlen("checkers/") + 1;
+    char * checker = malloc(len * sizeof(char));
+    if (strcmp(set.checker, "checker_int") == 0) {
+        sprintf(checker, "checkers/checker_int");
+        return checker;
+    }
+    if (strcmp(set.checker, "checker_byte") == 0) {
+        sprintf(checker, "checkers/checker_byte");
+        return checker;
+    }
+    perror("Wrong checker");
+    exit(1);
+}
+
+void check_wait_status(int wstatus2) {
+    if(WEXITSTATUS(wstatus2) == 0) {
+        putchar('+');
+    }
+    if(WEXITSTATUS(wstatus2) == 1) {
+        putchar('-');
+    }
+    if(WEXITSTATUS(wstatus2) == 2) {
+        putchar('x');
+    }
+}
+
+void launch_program(int * pipe_chanel, char * program_name, int i, char * program_tests) {
     int fd;
-    char * test_name, * correct_ans;
-    int pipe_chanel[2];
-    for (int i = 1; i <= set.tests; i++) {
-        pipe(pipe_chanel);
-        if (fork() == 0) {
-            test_name = set_test_name(i, program_tests);
-            fd = open(test_name, O_RDWR);
-            if (fd < 0) {
-                perror("Fail to open test");
-                exit(1);
-            }
-            if (dup2(fd, 0) < 0) {
-                perror("Fail to dup2 reading ");
-                exit(1);
-            }
-            if (dup2(pipe_chanel[1], 1) < 0) {
-                perror("Fail dup2 writing");
-                exit(1);
-            }
-            close(pipe_chanel[1]);
-            free(test_name);
-            if (execl(program_name, program_name, NULL) < 0) {
-                perror("Fail to open program");
-                exit(1);
-            }
+    char * test_name;
+    if (fork() == 0) {
+        test_name = set_test_name(i, program_tests);
+        fd = open(test_name, O_RDWR);
+        if (fd < 0) {
+            perror("Fail to open test");
+            exit(1);
+        }
+        if (dup2(fd, 0) < 0) {
+            perror("Fail to dup2 reading ");
+            exit(1);
+        }
+        if (dup2(pipe_chanel[1], 1) < 0) {
+            perror("Fail dup2 writing");
+            exit(1);
         }
         close(pipe_chanel[1]);
-        correct_ans = correct_ans_name(i, program_tests);
-        wait(NULL);
-        if (fork() == 0) {
-            close(pipe_chanel[1]);
-            if (dup2(pipe_chanel[0], 0) < 0) {
-                perror("Fail to dup2 (checker)");
-            }
-            if (close(pipe_chanel[0]) < 0) {
-                perror("Fail to close");
-            }
-            if (execl("checkers/checker_byte", "checkers/checker_byte", correct_ans, NULL)) {
-                perror("Fail to open program");
-                exit(1);
-            }
+        free(test_name);
+        if (execl(program_name, program_name, NULL) < 0) {
+            perror("Fail to open program");
+            exit(1);
         }
-        wait(NULL);
     }
+}
+
+void launch_checker(Settings set, int * pipe_chanel, char * correct_ans) {
+    if (fork() == 0) {
+        char * checker = set_checker(set);
+        close(pipe_chanel[1]);
+        if (dup2(pipe_chanel[0], 0) < 0) {
+            perror("Fail to dup2 (checker)");
+            exit(2);
+        }
+        if (close(pipe_chanel[0]) < 0) {
+            perror("Fail to close");
+            exit(2);
+        }
+        if (execl(checker, checker, correct_ans, NULL)) {
+            perror("Fail to open program");
+            exit(2);
+        }
+    }
+}
+
+void launch_tests(char * program_name, char * program_tests, Settings set) {
+    int pipe_chanel[2], wstatus2;
+    for (int i = 1; i <= set.tests; i++) {
+        pipe(pipe_chanel);
+        launch_program(pipe_chanel, program_name, i, program_tests);
+        close(pipe_chanel[1]);
+        wait(NULL);
+        char * correct_ans = correct_ans_name(i, program_tests);
+        launch_checker(set, pipe_chanel, correct_ans);
+        wait(&wstatus2);
+        check_wait_status(wstatus2);
+    }
+    puts("");
 }
 
 int main(int argc, char *args[]) {
