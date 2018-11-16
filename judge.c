@@ -17,6 +17,7 @@ typedef struct settings {
 typedef struct user_info {
 	char *username;
 	char *results;
+	int sum;
 } UserInfo;
 
 void invalid_format()
@@ -301,6 +302,7 @@ void run_tests(char *contest_name, UserInfo **user_list, Settings set,
 		}
 		(*cur_user)->results = result;
 	}
+	// TODO: clear_var();
 }
 
 void free_settings(Settings set)
@@ -322,17 +324,48 @@ void free_users_info(UserInfo **user_list)
 
 int get_sum(char *result, char *sum_type)
 {
+	//REMOVE
+	static int bias = 3;
 	int sum = 0;
 	for (int i = 0; result[i]; i++) {
 		if (result[i] == '+')
-			sum++;
+			sum += 1 + (bias % 5);
+		bias++;
 	}
 	return sum;
+}
+
+int get_list_size(UserInfo **user_list)
+{
+	int size = 0;
+	while(user_list[size])
+		size++;
+	return size;
+}
+
+int comp(const void *void_one, const void *void_two)
+{
+	UserInfo **one = (UserInfo **) void_one;
+	UserInfo **two = (UserInfo **) void_two;
+	int sum1 = (*one)->sum;
+	int sum2 = (*two)->sum;
+	//printf("%s %s\n", name1, name2);
+	return -(sum1 - sum2);
+}
+
+void calculate_results(UserInfo **user_list, Settings set)
+{
+	for (int i = 0; user_list[i]; i++) {
+		UserInfo *user = user_list[i];
+		user->sum = get_sum(user->results, set.score);
+	}
 }
 
 void generate_results_file(UserInfo **user_list, Settings set, 
 	const char alphabet[])
 {
+	int list_size = get_list_size(user_list);
+	qsort(user_list, list_size, sizeof(UserInfo *), comp);
 	printf("\nResults:\n");
 	FILE *csv = fopen("results.csv", "w");
 	if (csv == NULL) {
@@ -355,8 +388,8 @@ void generate_results_file(UserInfo **user_list, Settings set,
 			printf("%-2c", (user->results)[j]);
 			fprintf(csv, "%c,", (user->results)[j]);
 		}
-		printf("%-4d\n", get_sum(user->results, set.score));
-		fprintf(csv, "%d\n", get_sum(user->results, set.score));
+		printf("%-4d\n", user->sum);
+		fprintf(csv, "%d\n", user->sum);
 	}
 	fclose(csv);
 }
@@ -383,6 +416,7 @@ int main(int argc, char *args[]){
 	print_settings(set);
 	print_list(user_list);
 	run_tests(contest_name, user_list, set, alphabet);
+	calculate_results(user_list, set);
 	generate_results_file(user_list, set, alphabet);
 	free_settings(set);
 	free_users_info(user_list);
