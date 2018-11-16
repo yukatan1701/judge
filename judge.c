@@ -7,12 +7,17 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <errno.h>
 
 typedef struct settings {
 	int problems;
 	char *score;
-
 } Settings;
+
+typedef struct user_info {
+	char *username;
+	char *results;
+} UserInfo;
 
 void invalid_format()
 {
@@ -28,8 +33,10 @@ void allocation_error()
 
 void print_settings(Settings set)
 {
+	puts("Current settings:");
 	printf("problems: %d\n", set.problems);
 	printf("score: %s\n", set.score);
+	puts("");
 }
 
 char *copy_string(char *value)
@@ -46,9 +53,9 @@ char *copy_string(char *value)
 void put_data(Settings *set, char *key, char *value)
 {
 	if (strcmp(key, "problems") == 0) {
-		(*set).problems = atoi(value);
+		set->problems = atoi(value);
 	} else if (strcmp(key, "score") == 0) {
-		(*set).score = copy_string(value);
+		set->score = copy_string(value);
 	}
 }
 
@@ -67,7 +74,6 @@ Settings read_settings(FILE *file)
 				c = fgetc(file);
 				continue;
 			}
-			//putchar(c);
 			if (c == '=') {
 				if (was_equal)
 					invalid_format();
@@ -92,7 +98,6 @@ Settings read_settings(FILE *file)
 			else
 				invalid_format();
 		}
-		//printf("%s (=) %s\n", key, value);
 		if (key == NULL || value == NULL)
 			invalid_format();
 		put_data(&set, key, value);
@@ -104,16 +109,14 @@ Settings read_settings(FILE *file)
 
 Settings init_settings(char *contest_name)
 {
+	puts("Reading settings...");
 	char filename[] = "global.cfg";
 	int len = strlen(contest_name) + strlen(filename) + 2;
 	char *path = malloc(len * sizeof(int));
 	if (path == NULL)
 		allocation_error();
 	memset(path, 0, len);
-	strcpy(path, contest_name);
-	strncat(path, "/", 1);
-	strcat(path, filename);
-	//puts(path);
+	sprintf(path, "%s/%s", contest_name, filename);
 	FILE *settings_file = fopen(path, "r");
 	free(path);
 	if (!settings_file) {
@@ -122,12 +125,13 @@ Settings init_settings(char *contest_name)
 	}
 	Settings set = read_settings(settings_file);
 	fclose(settings_file);
+	puts("OK.\n");
 	return set;
 }
 
-char **get_user_list()
+UserInfo **get_user_list()
 {
-	char **user_list = NULL;
+	UserInfo **user_list = NULL;
 	int len = 0;
 	DIR *dir;
 	struct dirent *ent;
@@ -135,8 +139,15 @@ char **get_user_list()
 		while ((ent = readdir(dir)) != NULL) {
 			if (strcmp(ent->d_name, "..") != 0 && 
 				strcmp(ent->d_name, ".") != 0) {
-				user_list = realloc(user_list, (len + 2) * sizeof(char *));
-				user_list[len] = ent->d_name;
+				user_list = realloc(user_list, (len + 2) * sizeof(UserInfo *));
+				if (user_list == NULL)
+					allocation_error();
+				UserInfo *info = malloc(sizeof(UserInfo *));
+				if (info == NULL)
+					allocation_error();
+				info->username = ent->d_name;
+				info->results = NULL;
+				user_list[len] = info;
 				user_list[len + 1] = NULL;
 				len++;
 			}
@@ -148,49 +159,55 @@ char **get_user_list()
 	return user_list;
 }
 
-void print_list(char **user_list)
+void print_list(UserInfo **user_list)
 {
 	if (user_list == NULL) {
-		puts("No users found.");
+		puts("No users found. Terminate.");
 		exit(1);
 	}
+	puts("Users:");
 	for (int i = 0; user_list[i]; i++)
-		puts(user_list[i]);
+		printf("%s ", user_list[i]->username);
+	puts("\n");
 }
 
-char *generate_file_path(char *contest_name, char *username, char letter)
+char *generate_file_path(char *contest_name, char letter)
 {
-	static const int filename_len = 3;
-	static const int slashes_count = 2;
-	int user_path_len = strlen(contest_name) + strlen(username) + 
-		filename_len + slashes_count;
+	static const int filename_len = 1;
+	static const int slashes_count = 1;
+	int user_path_len = strlen("var") + filename_len + slashes_count;
 	char *user_file_path = malloc(sizeof(char) * (user_path_len + 1));
 	if (user_file_path == NULL)
 		allocation_error();
 	memset(user_file_path, 0, user_path_len + 1);
-	strcpy(user_file_path, contest_name);
-	strcat(user_file_path, "/");
-	strcat(user_file_path, username);
-	strcat(user_file_path, "/");
-	strncat(user_file_path, &letter, 1);
-	strcat(user_file_path, ".c");
+	sprintf(user_file_path, "var/%c", letter);
 	return user_file_path;
+}
+
+char *generate_code_path(char *contest_name, char *username, char letter)
+{	
+	static const int slashes_count = 3;
+	static const int filename_len = 3;
+	int tests_path_len = strlen(contest_name) + strlen("code") + 
+		strlen(username) + filename_len + slashes_count + 1;
+	char *code_path = malloc(sizeof(char) * (tests_path_len + 1));
+	if (code_path == NULL)
+		allocation_error();
+	memset(code_path, 0, tests_path_len + 1);
+	sprintf(code_path, "%s/code/%s/%c.c", contest_name, username, letter);
+	return code_path;
 }
 
 char *generate_output_path(char *contest_name, char letter)
 {	
-	static const char test_dir[] = "tests";
 	static const int slashes_count = 2;
-	int tests_path_len = strlen(contest_name) + strlen(test_dir) + slashes_count + 1;
+	int tests_path_len = strlen(contest_name) + strlen("tests") + 1 + 
+		slashes_count + 1;
 	char *output_path = malloc(sizeof(char) * (tests_path_len + 1));
 	if (output_path == NULL)
 		allocation_error();
 	memset(output_path, 0, tests_path_len + 1);
-	strcpy(output_path, contest_name);
-	strcat(output_path, "/");
-	strcat(output_path, test_dir);
-	strcat(output_path, "/");
-	strncat(output_path, &letter, 1);
+	sprintf(output_path, "%s/tests/%c", contest_name, letter);
 	return output_path;
 }
 
@@ -201,20 +218,58 @@ void free_buffer()
 		;
 }
 
-char **run_tests(char *contest_name, char **user_list, Settings set, const char alphabet[])
+void compile_user_codes(char *contest_name, char *username, Settings set, 
+	const char alphabet[])
 {
-	char **results_list = NULL;
+	const int path_len = sizeof("var/") + sizeof("");
+	char path[path_len + 1];
+	//char filename[2] = {0, 0};
+	for (int i = 0; i < set.problems; i++) {
+		char letter = alphabet[i];
+		char *code = generate_code_path(contest_name, username, letter);
+		memset(path, 0, path_len + 1);
+		sprintf(path, "var/%c", letter);
+		//printf("Try to compile: FROM: %s TO: %s\n", code, path);
+		printf("Compiling: %c.c... ", letter);
+		if (fork() == 0) {
+			//filename[0] = letter;
+			close(2);
+			if (execlp("gcc", "gcc", code, "-o", path, NULL) < 0) {
+				perror("Failed to compile user program");
+				exit(1);
+			}
+		}
+		int status;
+		wait(&status);
+		if (WEXITSTATUS(status) != 0) {
+			puts("Failed.");
+		} else {
+			puts("Ok!");
+		}
+		free(code);
+	}
+}
+
+void run_tests(char *contest_name, UserInfo **user_list, Settings set, 
+	const char alphabet[])
+{
+	puts("Checking user programs...");
 	int user_num = 0;
-	for (char **cur_user = user_list; *cur_user; cur_user++, user_num++) {
+	for (UserInfo **cur_user = user_list; *cur_user; cur_user++, user_num++) {
 		char *result = malloc(sizeof(char) * (set.problems + 1));
 		if (result == NULL)
 			allocation_error();
 		memset(result, 0, set.problems + 1);
+		printf("\nUser: %s\n", (*cur_user)->username);
+		compile_user_codes(contest_name, (*cur_user)->username, set, alphabet);
 		for (int i = 0; i < set.problems && i < strlen(alphabet) - 1; i++) {
-			char *user_file_path = generate_file_path(contest_name, *cur_user, alphabet[i]);
+			char *user_file_path = generate_file_path(contest_name, 
+				alphabet[i]);
 			char *output_path = generate_output_path(contest_name, alphabet[i]);
 			int fd[2];
 			pipe(fd);
+			//printf("Testing: (%s) (%s)\n", user_file_path, output_path);
+			printf("Running tests for program: %c.c...\n", alphabet[i]);
 			if (fork() == 0)
 			{
 				close(fd[0]);
@@ -223,7 +278,8 @@ char **run_tests(char *contest_name, char **user_list, Settings set, const char 
 				char *tmp = malloc(10);
 				memset(tmp, 0, 9);
 				tmp[0] = (char) i;
-				if (execl("test_tmp", tmp, user_file_path, output_path, NULL) < 0) {
+				if (execl("test_tmp", tmp, user_file_path, 
+					output_path, NULL) < 0) {
 					perror("Failed to run tests");
 					exit(1);
 				}
@@ -240,12 +296,11 @@ char **run_tests(char *contest_name, char **user_list, Settings set, const char 
 			char child_answer = getchar();
 			result[i] = child_answer;
 			free_buffer();
+			free(user_file_path);
+			free(output_path);
 		}
-		results_list = realloc(results_list, (user_num + 2) * sizeof(char *));
-		results_list[user_num] = result;
-		results_list[user_num + 1] = NULL;
+		(*cur_user)->results = result;
 	}
-	return results_list;
 }
 
 void free_settings(Settings set)
@@ -255,24 +310,64 @@ void free_settings(Settings set)
 	set.score = NULL;
 }
 
-void generate_results_file(char **user_list, char **results_list, Settings set, const char alphabet[])
+void free_users_info(UserInfo **user_list)
 {
+	for (int i = 0; user_list[i]; i++) {
+		UserInfo *user = user_list[i];
+		free(user->results);
+		free(user);
+	}
+	free(user_list);
+}
+
+int get_sum(char *result, char *sum_type)
+{
+	int sum = 0;
+	for (int i = 0; result[i]; i++) {
+		if (result[i] == '+')
+			sum++;
+	}
+	return sum;
+}
+
+void generate_results_file(UserInfo **user_list, Settings set, 
+	const char alphabet[])
+{
+	printf("\nResults:\n");
 	FILE *csv = fopen("results.csv", "w");
 	if (csv == NULL) {
 		perror("Failed to open results.csv");
 		exit(1);
 	}
 	fprintf(csv, "user,");
-	for (int i = 0; i < set.problems; i++)
+	printf("%-15s", "user");
+	for (int i = 0; i < set.problems; i++) {
 		fprintf(csv, "%c,", alphabet[i]);
+		printf("%-2c", alphabet[i]);
+	}
 	fprintf(csv, "Sum\n");
+	printf("%-4s\n", "Sum");
 	for (int i = 0; user_list[i]; i++) {
-		fprintf(csv, "%s,", user_list[i]);
-		for (int j = 0; j < set.problems; j++)
-			fprintf(csv, "%c,", results_list[i][j]);
-		fprintf(csv, "%d\n", -1);
+		UserInfo *user = user_list[i];
+		fprintf(csv, "%s,", user->username);
+		printf("%-15s", user->username);
+		for (int j = 0; j < set.problems; j++) {
+			printf("%-2c", (user->results)[j]);
+			fprintf(csv, "%c,", (user->results)[j]);
+		}
+		printf("%-4d\n", get_sum(user->results, set.score));
+		fprintf(csv, "%d\n", get_sum(user->results, set.score));
 	}
 	fclose(csv);
+}
+
+void create_directories()
+{
+	printf("Creating directories...\n");
+	int mode = S_IRWXU;
+	mkdir("var", mode);
+	mkdir("log", mode);
+	printf("OK.\n");
 }
 
 int main(int argc, char *args[]){
@@ -282,15 +377,14 @@ int main(int argc, char *args[]){
 		puts("Contest name not found.");
 		return 1;
 	}
+	create_directories();
 	Settings set = init_settings(contest_name);
+	UserInfo **user_list = get_user_list();
 	print_settings(set);
-	char **user_list = get_user_list();
 	print_list(user_list);
-	char **results_list = run_tests(contest_name, user_list, set, alphabet);
-	print_list(results_list);
-	generate_results_file(user_list, results_list, set, alphabet);
+	run_tests(contest_name, user_list, set, alphabet);
+	generate_results_file(user_list, set, alphabet);
 	free_settings(set);
-	free(user_list);
-	//TODO: free_results_list
+	free_users_info(user_list);
 	return 0;
 }
