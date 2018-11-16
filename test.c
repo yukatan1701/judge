@@ -112,31 +112,63 @@ char * set_test_name(int i, char * program_tests) {
     char * test = NULL;
     int len = strlen(program_tests) + 16;
     test = malloc(len * sizeof(char));
-    if (test == NULL)
-		allocation_error();
     sprintf(test, "%s/%d.dat", program_tests, i);
+    return test;
+}
+
+char * correct_ans_name(int i, char * program_tests) {
+    char * test = NULL;
+    int len = strlen(program_tests) + 16;
+    test = malloc(len * sizeof(char));
+    sprintf(test, "%s/%d.ans", program_tests, i);
     return test;
 }
 
 void launch_tests(char * program_name, char * program_tests, Settings set) {
     int fd;
-    char * test_name;
+    char * test_name, * correct_ans;
+    int pipe_chanel[2];
     for (int i = 1; i <= set.tests; i++) {
-        wait(NULL);
+        pipe(pipe_chanel);
         if (fork() == 0) {
             test_name = set_test_name(i, program_tests);
             fd = open(test_name, O_RDWR);
             if (fd < 0) {
-                printf("Fail to open test # %d ", i);
-                perror("");
+                perror("Fail to open test");
+                exit(1);
             }
+            if (dup2(fd, 0) < 0) {
+                perror("Fail to dup2 reading ");
+                exit(1);
+            }
+            if (dup2(pipe_chanel[1], 1) < 0) {
+                perror("Fail dup2 writing");
+                exit(1);
+            }
+            close(pipe_chanel[1]);
             free(test_name);
-            dup2(fd, 0);
             if (execl(program_name, program_name, NULL) < 0) {
                 perror("Fail to open program");
                 exit(1);
             }
         }
+        close(pipe_chanel[1]);
+        correct_ans = correct_ans_name(i, program_tests);
+        wait(NULL);
+        if (fork() == 0) {
+            close(pipe_chanel[1]);
+            if (dup2(pipe_chanel[0], 0) < 0) {
+                perror("Fail to dup2 (checker)");
+            }
+            if (close(pipe_chanel[0]) < 0) {
+                perror("Fail to close");
+            }
+            if (execl("checkers/checker_byte", "checkers/checker_byte", correct_ans, NULL)) {
+                perror("Fail to open program");
+                exit(1);
+            }
+        }
+        wait(NULL);
     }
 }
 
@@ -148,7 +180,7 @@ int main(int argc, char *args[]) {
 		return 1;
 	}
 	Settings set = init_settings(program_tests);
-	print_settings(set);
+	//print_settings(set);
 	launch_tests(program_name, program_tests, set);
 	return 0;
 }
