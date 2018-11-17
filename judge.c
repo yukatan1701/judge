@@ -130,13 +130,19 @@ Settings init_settings(char *contest_name)
 	return set;
 }
 
-UserInfo **get_user_list()
+UserInfo **get_user_list(char *contest_name)
 {
 	UserInfo **user_list = NULL;
 	int len = 0;
 	DIR *dir;
 	struct dirent *ent;
-	if ((dir = opendir("contest/code")) != NULL) {
+	int code_path_len = strlen(contest_name) + sizeof("/code");
+	char *code_path = malloc((code_path_len + 1) * sizeof(char));
+	memset(code_path, 0, code_path_len + 1);
+	sprintf(code_path, "%s/code", contest_name);
+	if (code_path == NULL)
+		allocation_error();
+	if ((dir = opendir(code_path)) != NULL) {
 		while ((ent = readdir(dir)) != NULL) {
 			if (strcmp(ent->d_name, "..") != 0 && 
 				strcmp(ent->d_name, ".") != 0) {
@@ -157,6 +163,7 @@ UserInfo **get_user_list()
 		perror("User codes not found");
 		exit(1);
 	}
+	free(code_path);
 	return user_list;
 }
 
@@ -212,11 +219,59 @@ char *generate_output_path(char *contest_name, char letter)
 	return output_path;
 }
 
-void free_buffer()
+void answer_to_file(char *contest_name, char *username, char *answer, 
+	char letter)
 {
-	char ch;
-	while ((ch = getchar()) != EOF)
-		;
+	static const int slashes_count = 3;
+	static const char res[] = "results.txt";
+	int len = strlen(contest_name) + strlen(username) + strlen("code") + 
+		slashes_count + strlen(res) + 2;
+	char *path = malloc(sizeof(char) * (len + 1));
+	memset(path, 0, len + 1);
+	sprintf(path, "%s/code/%s/%c_%s", contest_name, username, letter, res);
+	FILE *res_file = fopen(path, "w");
+	if (res_file == NULL) {
+		perror("Failed to open results.txt");
+		exit(1);
+	}
+	fprintf(res_file, "%s", answer);
+	free(path);
+	fclose(res_file);
+}
+
+char get_answer(char *contest_name, char *username, char letter)
+{
+	char *ans = NULL;
+	int size = 0;
+	char ch = 0;
+	while ((ch = getchar()) != EOF) {
+		if (ch == '\n')
+			continue;
+		ans = realloc(ans, size + 2);
+		if (ans == NULL)
+			allocation_error();
+		ans[size] = ch;
+		ans[size + 1] = 0;
+		size++;
+	}
+	printf("%s\n", ans);
+	//puts(ans);
+	//answer_to_file(contest_name, username, ans, letter);
+	int plus = 0, minus = 0, x = 0;
+	for (int i = 0; i < size; i++) {
+		if (ans[i] == '+')
+			plus++;
+		else if (ans[i] == '-')
+			minus++;
+		else
+			x++;
+	}
+	free(ans);
+	if (x != 0)
+		return 'x';
+	if (plus != 0 && minus == 0)
+		return '+';
+	return '-';
 }
 
 void compile_user_codes(char *contest_name, char *username, Settings set, 
@@ -251,6 +306,16 @@ void compile_user_codes(char *contest_name, char *username, Settings set,
 	}
 }
 
+void clear_var_dir(const char alphabet[])
+{
+	char path[257];
+	memset(path, 0, 257);
+	for (int i = 0; i < strlen(alphabet); i++) {
+		sprintf(path, "var/%c", alphabet[i]);
+		unlink(path);
+	}	
+}
+
 void run_tests(char *contest_name, UserInfo **user_list, Settings set, 
 	const char alphabet[])
 {
@@ -269,18 +334,14 @@ void run_tests(char *contest_name, UserInfo **user_list, Settings set,
 			char *output_path = generate_output_path(contest_name, alphabet[i]);
 			int fd[2];
 			pipe(fd);
-			//printf("Testing: (%s) (%s)\n", user_file_path, output_path);
 			printf("Running tests for program: %c.c...\n", alphabet[i]);
+			printf("(%s) (%s)\n", user_file_path, output_path);
 			if (fork() == 0)
 			{
 				close(fd[0]);
 				dup2(fd[1], 1);
 				close(fd[1]);
-				char *tmp = malloc(10);
-				memset(tmp, 0, 9);
-				tmp[0] = (char) i;
-				if (execl("test_tmp", tmp, user_file_path, 
-					output_path, NULL) < 0) {
+				if (execl("test", "test", user_file_path, output_path, NULL) < 0) {
 					perror("Failed to run tests");
 					exit(1);
 				}
@@ -290,19 +351,20 @@ void run_tests(char *contest_name, UserInfo **user_list, Settings set,
 			close(fd[0]);
 			int status = 0;
 			wait(&status);
+			printf("Status: %d\n", status);
 			if (WEXITSTATUS(status) != 0) {
 				puts("Tests stopped.");
+				clear_var_dir(alphabet);
 				exit(1);
 			}
-			char child_answer = getchar();
+			char child_answer = get_answer(contest_name, (*cur_user)->username, alphabet[i]);
 			result[i] = child_answer;
-			free_buffer();
 			free(user_file_path);
 			free(output_path);
 		}
 		(*cur_user)->results = result;
+		clear_var_dir(alphabet);
 	}
-	// TODO: clear_var();
 }
 
 void free_settings(Settings set)
@@ -324,13 +386,10 @@ void free_users_info(UserInfo **user_list)
 
 int get_sum(char *result, char *sum_type)
 {
-	//REMOVE
-	static int bias = 3;
 	int sum = 0;
 	for (int i = 0; result[i]; i++) {
 		if (result[i] == '+')
-			sum += 1 + (bias % 5);
-		bias++;
+			sum++;
 	}
 	return sum;
 }
@@ -412,7 +471,7 @@ int main(int argc, char *args[]){
 	}
 	create_directories();
 	Settings set = init_settings(contest_name);
-	UserInfo **user_list = get_user_list();
+	UserInfo **user_list = get_user_list(contest_name);
 	print_settings(set);
 	print_list(user_list);
 	run_tests(contest_name, user_list, set, alphabet);
