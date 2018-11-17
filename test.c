@@ -8,9 +8,8 @@
 
 typedef struct logfile {
     char * problem;
-    int tested;
-    int fail_open_dat;
-    int fail_open_ans;
+    int test_num;
+    int status;
 } Logfile;
 
 typedef struct settings {
@@ -173,17 +172,17 @@ void launch_program(int * pipe_chanel, char * program_name, int i, char * progra
         }
         if (dup2(fd, 0) < 0) {
             perror("Fail to dup2 reading ");
-            exit(1);
+            exit(2);
         }
         if (dup2(pipe_chanel[1], 1) < 0) {
             perror("Fail dup2 writing");
-            exit(1);
+            exit(2);
         }
         close(pipe_chanel[1]);
         free(test_name);
         if (execl(program_name, program_name, NULL) < 0) {
             perror("Fail to open program");
-            exit(1);
+            exit(2);
         }
     }
 }
@@ -208,23 +207,23 @@ void launch_checker(Settings set, int * pipe_chanel, char * correct_ans) {
 }
 
 void check_wstat_prog(int wstatus1) {
-    if (WEXITSTATUS(wstatus1) != 0) {
+    if (WEXITSTATUS(wstatus1) == 1) {
         exit(1);
+    }
+    if (WEXITSTATUS(wstatus1) == 2) {
+        putchar('x');
+        exit(0);
     }
 }
 
 void init_log(Logfile * log, char * program_name) {
     log -> problem = program_name;
-    log -> tested = 0;
-    log -> fail_open_dat = 0;
-    log -> fail_open_ans = 0;
 }
 
 void print_log(Logfile log) {
     printf("Problem: %s\n", log.problem);
-    printf("tested: %d\n", log.tested);
-    printf("fail open test: %d\n", log.fail_open_dat);
-    printf("fail open ans %d\n", log.fail_open_ans);
+    printf("tested: %d\n", log.test_num);
+    printf("status: %d\n", log.status);
 }
 
 void launch_tests(char * program_name, char * program_tests, Settings set) {
