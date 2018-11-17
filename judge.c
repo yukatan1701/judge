@@ -144,6 +144,8 @@ UserInfo **get_user_list(char *contest_name)
 		allocation_error();
 	if ((dir = opendir(code_path)) != NULL) {
 		while ((ent = readdir(dir)) != NULL) {
+			if (ent->d_type != DT_DIR)
+				continue;
 			if (strcmp(ent->d_name, "..") != 0 && 
 				strcmp(ent->d_name, ".") != 0) {
 				user_list = realloc(user_list, (len + 2) * sizeof(UserInfo *));
