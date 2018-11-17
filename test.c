@@ -6,6 +6,13 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
+typedef struct logfile {
+    char * problem;
+    int tested;
+    int fail_open_dat;
+    int fail_open_ans;
+} Logfile;
+
 typedef struct settings {
 	int tests;
 	char *checker;
@@ -147,6 +154,9 @@ void check_wstat_checker(int wstatus2) {
         putchar('-');
     }
     if(WEXITSTATUS(wstatus2) == 2) {
+        exit(1);
+    }
+    if(WEXITSTATUS(wstatus2) == 3) {
         putchar('x');
     }
 }
@@ -203,7 +213,24 @@ void check_wstat_prog(int wstatus1) {
     }
 }
 
+void init_log(Logfile * log, char * program_name) {
+    log -> problem = program_name;
+    log -> tested = 0;
+    log -> fail_open_dat = 0;
+    log -> fail_open_ans = 0;
+}
+
+void print_log(Logfile log) {
+    printf("Problem: %s\n", log.problem);
+    printf("tested: %d\n", log.tested);
+    printf("fail open test: %d\n", log.fail_open_dat);
+    printf("fail open ans %d\n", log.fail_open_ans);
+}
+
 void launch_tests(char * program_name, char * program_tests, Settings set) {
+    Logfile log;
+	init_log(&log, program_name);
+    //print_log(log);
     int pipe_chanel[2], wstatus1, wstatus2;
     for (int i = 1; i <= set.tests; i++) {
         pipe(pipe_chanel);
@@ -219,6 +246,8 @@ void launch_tests(char * program_name, char * program_tests, Settings set) {
     puts("");
 }
 
+
+
 int main(int argc, char *args[]) {
 	char * program_name = args[1];
 	char * program_tests = args[2];
@@ -227,6 +256,7 @@ int main(int argc, char *args[]) {
 		return 1;
 	}
 	Settings set = init_settings(program_tests);
+	//print_log(log);
 	//print_settings(set);
 	launch_tests(program_name, program_tests, set);
 	return 0;

@@ -27,7 +27,7 @@ char * open_ans(char * file_path) {
     char * file_ans = NULL;
     char ch;
     if (fd < 0) {
-        perror("Fail open test sss");
+        perror("checker: Fail open test");
         exit(2);
     }
     ssize_t read_char = read(fd, &ch, 1);
@@ -42,8 +42,7 @@ char * open_ans(char * file_path) {
         }
     }
     file_ans = realloc(file_ans, (n + 1) * sizeof(char));
-    file_ans[n] = '\0';    
-    n++;
+    file_ans[n] = '\0';
     if (close(fd) < 0) {
         perror("Fail close test");
         exit(2);
@@ -66,5 +65,13 @@ int main(int argc, char * argv[]) {
             }
         }
     }
+    if (program_ans[0] == '\0') {
+        status = 3;
+    }
+    if(correct_ans[0] == '\0') {
+        status = 2;
+    }
+    free(program_ans);
+    free(correct_ans);
     return status;
 }
