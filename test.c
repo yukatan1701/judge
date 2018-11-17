@@ -139,7 +139,7 @@ char * set_checker(Settings set) {
     exit(1);
 }
 
-void check_wait_status(int wstatus2) {
+void check_wstat_checker(int wstatus2) {
     if(WEXITSTATUS(wstatus2) == 0) {
         putchar('+');
     }
@@ -158,7 +158,7 @@ void launch_program(int * pipe_chanel, char * program_name, int i, char * progra
         test_name = set_test_name(i, program_tests);
         fd = open(test_name, O_RDWR);
         if (fd < 0) {
-            perror("Fail to open test");
+            perror("Error open test");
             exit(1);
         }
         if (dup2(fd, 0) < 0) {
@@ -197,17 +197,24 @@ void launch_checker(Settings set, int * pipe_chanel, char * correct_ans) {
     }
 }
 
+void check_wstat_prog(int wstatus1) {
+    if (WEXITSTATUS(wstatus1) != 0) {
+        exit(1);
+    }
+}
+
 void launch_tests(char * program_name, char * program_tests, Settings set) {
-    int pipe_chanel[2], wstatus2;
+    int pipe_chanel[2], wstatus1, wstatus2;
     for (int i = 1; i <= set.tests; i++) {
         pipe(pipe_chanel);
         launch_program(pipe_chanel, program_name, i, program_tests);
         close(pipe_chanel[1]);
-        wait(NULL);
+        wait(&wstatus1);
+        check_wstat_prog(wstatus1);
         char * correct_ans = correct_ans_name(i, program_tests);
         launch_checker(set, pipe_chanel, correct_ans);
         wait(&wstatus2);
-        check_wait_status(wstatus2);
+        check_wstat_checker(wstatus2);
     }
     puts("");
 }
