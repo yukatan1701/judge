@@ -1,0 +1,77 @@
+Contest: 
+full_contest
+
+Creating directories...
+OK.
+
+Reading settings...
+OK.
+
+Current settings:
+problems: 3
+score: sum
+
+Users:
+user2 user1 usr3 UsrR4 
+
+Checking user programs...
+
+User: user2
+Ok!
+Compiling: A.c... Failed.
+Compiling: B.c... Ok!
+Compiling: C.c... Running tests for program: A.c...
+From: var/A | To: full_contest/tests/A
+Problem A: +++
+Running tests for program: B.c...
+From: var/B | To: full_contest/tests/B
+Problem B: x
+Running tests for program: C.c...
+From: var/C | To: full_contest/tests/C
+Problem C: +++
+Clearing binary files...
+
+User: user1
+Ok!
+Compiling: A.c... Ok!
+Compiling: B.c... Failed.
+Compiling: C.c... Running tests for program: A.c...
+From: var/A | To: full_contest/tests/A
+Problem A: +++
+Running tests for program: B.c...
+From: var/B | To: full_contest/tests/B
+Problem B: ++
+Running tests for program: C.c...
+From: var/C | To: full_contest/tests/C
+Problem C: x
+Clearing binary files...
+
+User: usr3
+Ok!
+Compiling: A.c... Ok!
+Compiling: B.c... Ok!
+Compiling: C.c... Running tests for program: A.c...
+From: var/A | To: full_contest/tests/A
+Problem A: +++
+Running tests for program: B.c...
+From: var/B | To: full_contest/tests/B
+Problem B: ++
+Running tests for program: C.c...
+From: var/C | To: full_contest/tests/C
+Problem C: +++
+Clearing binary files...
+
+User: UsrR4
+Ok!
+Compiling: A.c... Ok!
+Compiling: B.c... Ok!
+Compiling: C.c... Running tests for program: A.c...
+From: var/A | To: full_contest/tests/A
+Problem A: +--
+Running tests for program: B.c...
+From: var/B | To: full_contest/tests/B
+Problem B: ++
+Running tests for program: C.c...
+From: var/C | To: full_contest/tests/C
+Problem C: ---
+Clearing binary files...
