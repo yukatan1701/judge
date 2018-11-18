@@ -6,6 +6,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <time.h>
+#include <sys/stat.h>
 
 typedef struct logfile {
     char * problem;
@@ -385,6 +386,11 @@ void compile_checker(Settings set, char * program_name) {
     free(name);
 }
 
+void create_log_dir() {
+    int mode = S_IRWXU;
+	mkdir("tests_log", mode);
+}
+
 int main(int argc, char *args[]) {
 	char * program_name = args[1];
 	char * program_tests = args[2];
@@ -396,6 +402,7 @@ int main(int argc, char *args[]) {
 	    puts("Program tests not found.");
 		return 1;
 	}
+	create_log_dir();
 	Settings set = init_settings(program_tests);
 	//print_log(log);
 	//print_settings(set);
