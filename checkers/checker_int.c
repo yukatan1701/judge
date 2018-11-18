@@ -62,7 +62,13 @@ int main(int argc, char * argv[]) {
     if (atoi(correct_ans) != atoi(program_ans)) {
         status = 1;
     }
-    free(correct_ans);
+    if (program_ans[0] == '\0') {
+        status = 3;
+    }
+    if(correct_ans[0] == '\0') {
+        status = 2;
+    }
     free(program_ans);
+    free(correct_ans);
     return status;
 }
