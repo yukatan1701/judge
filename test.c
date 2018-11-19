@@ -199,7 +199,7 @@ void launch_checker(Settings set, int * pipe_chanel, char * correct_ans) {
             exit(2);
         }
         if (execl(checker, checker, correct_ans, NULL)) {
-            perror("Fail to open program");
+            perror("Fail to open checker");
             exit(2);
         }
     }
@@ -231,7 +231,7 @@ void write_num(int a, int fd) {
     }
 }
 
-// log status = 1: не открылся dat файл
+// log status = 10: не открылся dat файл
 // status = 2: не запустилась программа
 // status = 3: проблема с checker / файлом ans
 // status = 4: программа не выдала ответ
@@ -239,7 +239,7 @@ void write_num(int a, int fd) {
 
 void write_status(Logfile log, int fd) {
     switch(log.status) {
-        case 1:
+        case 10:
             write(fd, "dat file error", strlen("dat file error"));
             break;
         case 2:
@@ -275,8 +275,7 @@ char * set_log_name() {
     return log_name;
 }
 
-void write_log(Logfile log) {
-    char * log_name = set_log_name();
+void write_log(Logfile log, char * log_name) {
     chdir("tests_log");
     int fd = open(log_name, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR);
     write(fd, "start", 5);
@@ -296,7 +295,7 @@ void write_log(Logfile log) {
     chdir("..");
 }
 
-void check_wstat_checker(int wstatus2, Logfile * log) {
+void check_wstat_checker(int wstatus2, Logfile * log, char * log_name) {
     if(WEXITSTATUS(wstatus2) == 0) {
         putchar('+');
     }
@@ -305,30 +304,31 @@ void check_wstat_checker(int wstatus2, Logfile * log) {
     }
     if(WEXITSTATUS(wstatus2) == 2) { // проблема с checker / файлом ans
         log -> status = 3;
-        write_log(*log);
+        write_log(*log, log_name);
         exit(1);
     }
     if(WEXITSTATUS(wstatus2) == 3) { // программа не выдала ответ
         putchar('x');
         log -> status = 4;
-    }
-}
-
-void check_wstat_prog(int wstatus1, Logfile * log) {
-    if (WEXITSTATUS(wstatus1) == 1) { // не открылся .dat файл
-        log -> status = 1;
-        write_log(*log);
-        exit(1);
-    }
-    if (WEXITSTATUS(wstatus1) == 2) { // Не запустилась программа
-        putchar('x');
-        log -> status = 2;
-        write_log(*log);
         exit(0);
     }
 }
 
-void launch_tests(char * program_name, char * program_tests, Settings set) {
+void check_wstat_prog(int wstatus1, Logfile * log, char * log_name) {
+    if (WEXITSTATUS(wstatus1) == 1) { // не открылся .dat файл
+        log -> status = 10;
+        write_log(*log, log_name);
+        exit(10);
+    }
+    if (WEXITSTATUS(wstatus1) == 2) { // Не запустилась программа
+        putchar('x');
+        log -> status = 2;
+        write_log(*log, log_name);
+        exit(0);
+    }
+}
+
+void launch_tests(char * program_name, char * program_tests, Settings set, char * log_name) {
     Logfile log;
     //print_log(log);
     int pipe_chanel[2], wstatus1, wstatus2;
@@ -338,12 +338,12 @@ void launch_tests(char * program_name, char * program_tests, Settings set) {
         launch_program(pipe_chanel, program_name, i, program_tests);
         close(pipe_chanel[1]);
         wait(&wstatus1);
-        check_wstat_prog(wstatus1, &log);
+        check_wstat_prog(wstatus1, &log, log_name);
         char * correct_ans = correct_ans_name(i, program_tests);
         launch_checker(set, pipe_chanel, correct_ans);
         wait(&wstatus2);
-        check_wstat_checker(wstatus2, &log);
-        write_log(log);
+        check_wstat_checker(wstatus2, &log, log_name);
+        write_log(log, log_name);
     }
     puts("");
 }
@@ -360,15 +360,15 @@ char * set_checker_name(Settings set) {
     return name;
 }
 
-void checker_log_fail(char * program_name) {
+void checker_log_fail(char * program_name, char * log_name) {
     Logfile log;
     log.problem = program_name;
     log.status = 5;
     log.test_num = 0;
-    write_log(log);
+    write_log(log, log_name);
 }
 
-void compile_checker(Settings set, char * program_name) {
+void compile_checker(Settings set, char * program_name, char * log_name) {
     char * name = set_checker_name(set);
     int wstatus;
     if (fork() == 0) {
@@ -380,7 +380,7 @@ void compile_checker(Settings set, char * program_name) {
     }
     wait(&wstatus);
     if (WEXITSTATUS(wstatus) != 0) {
-        checker_log_fail(program_name);
+        checker_log_fail(program_name, log_name);
         exit(1);
     }
     free(name);
@@ -406,7 +406,8 @@ int main(int argc, char *args[]) {
 	Settings set = init_settings(program_tests);
 	//print_log(log);
 	//print_settings(set);
-	compile_checker(set, program_name);
-	launch_tests(program_name, program_tests, set);
+	char * log_name = set_log_name();
+	compile_checker(set, program_name, log_name);
+	launch_tests(program_name, program_tests, set, log_name);
 	return 0;
 }
