@@ -9,6 +9,14 @@
 #include <dirent.h>
 #include <errno.h>
 #include <time.h>
+#define WHITE   "\033[1;37m"
+#define YELLOW	"\033[1;33m"
+#define RED		"\033[1;31m"
+#define CYAN	"\033[1;36m"
+#define GREEN   "\033[1;32m"
+#define RESET   "\033[0m"
+
+// TODO: settings parsing
 
 typedef struct settings {
 	int problems;
@@ -20,6 +28,14 @@ typedef struct user_info {
 	char *results;
 	int sum;
 } UserInfo;
+
+typedef struct problem_stat {
+	char *username;
+	char problem;
+	int tested;
+	int failed;
+	char *results;
+} Stat;
 
 char *log_path = NULL;
 
@@ -234,13 +250,34 @@ UserInfo **get_user_list(char *contest_name)
 	return user_list;
 }
 
+void print_stat(Stat stat)
+{
+	printf("%sstart test%s\n", YELLOW, RESET);
+	printf("  %suser%s: %s\n", CYAN, RESET, stat.username);
+	printf("  %sproblem%s: %c\n", CYAN, RESET, stat.problem);
+	printf("  %stested%s: %d\n", CYAN, RESET, stat.tested);
+	printf("  %sfailed%s: %d\n", CYAN, RESET,  stat.failed);
+	printf("  %sresults%s: %s\n", CYAN, RESET, stat.results);
+	printf("%sstop test%s\n\n", YELLOW, RESET);
+
+	FILE *log = open_log();
+	fprintf(log, "start test\n");
+	fprintf(log, "  user: %s\n", stat.username);
+	fprintf(log, "  problem: %c\n", stat.problem);
+	fprintf(log, "  tested: %d\n", stat.tested);
+	fprintf(log, "  failed: %d\n", stat.failed);
+	fprintf(log, "  results: %s\n", stat.results);
+	fprintf(log, "stop test\n\n");
+	fclose(log);
+}
+
 void print_list(UserInfo **user_list)
 {
 	if (user_list == NULL) {
 		puts("No users found. Terminate.");
 		exit(1);
 	}
-	puts("Users:");
+	printf("%sUsers:%s\n", GREEN, RESET);
 	write_log("Users:");
 	FILE *log = open_log();
 	for (int i = 0; user_list[i]; i++) {
@@ -312,7 +349,7 @@ void answer_to_file(char *contest_name, char *username, char *answer,
 	fclose(res_file);
 }
 
-char get_answer(char *contest_name, char *username, char letter)
+char get_answer(char *contest_name, char *username, char letter, Stat *stat)
 {
 	char *ans = NULL;
 	int size = 0;
@@ -327,21 +364,29 @@ char get_answer(char *contest_name, char *username, char letter)
 		ans[size + 1] = 0;
 		size++;
 	}
-	FILE *log = open_log();
-	fprintf(log, "Problem %c: %s\n", letter, ans);
-	printf("Problem %c: %s\n", letter, ans);
-	fclose(log);
 	answer_to_file(contest_name, username, ans, letter);
-	int plus = 0, minus = 0, x = 0;
+	int plus = 0, minus = 0, x = 0, failed = 0;
+	stat->tested = 0;
+	stat->failed = 0;
 	for (int i = 0; i < size; i++) {
+		stat->tested++;
 		if (ans[i] == '+')
 			plus++;
 		else if (ans[i] == '-')
 			minus++;
-		else
+		else if (ans[i] == 'x') {
+			stat->failed++;
 			x++;
+		}else {
+			printf("Warning: test %d is broken. Ignore it.\n", i + 1);
+			stat->failed++;
+			stat->tested--;
+			failed++;
+		}
 	}
-	free(ans);
+	stat->results = ans;
+	if (x == 0 && plus == 0 && minus == 0 && failed != 0)
+		return '?';
 	if (x != 0)
 		return 'x';
 	if (plus != 0 && minus == 0)
@@ -363,6 +408,7 @@ void compile_user_codes(char *contest_name, char *username, Settings set,
 		//printf("Try to compile: FROM: %s TO: %s\n", code, path);
 		FILE *log = open_log();
 		fprintf(log, "Compiling: %c.c... ", letter);
+		fclose(log);
 		if (fork() == 0) {
 			//filename[0] = letter;
 			close(2);
@@ -380,7 +426,6 @@ void compile_user_codes(char *contest_name, char *username, Settings set,
 			write_log("Ok!");
 		}
 		free(code);
-		fclose(log);
 	}
 }
 
@@ -405,12 +450,14 @@ void run_tests(char *contest_name, UserInfo **user_list, Settings set,
 		if (result == NULL)
 			allocation_error();
 		memset(result, 0, set.problems + 1);
-		printf("\nUser: %s\n", (*cur_user)->username);
+		//printf("\nUser: %s\n", (*cur_user)->username);
 		FILE *log = open_log();	
 		fprintf(log, "\nUser: %s\n", (*cur_user)->username);
 		fclose(log);
 		compile_user_codes(contest_name, (*cur_user)->username, set, alphabet);
+		Stat stat = {(*cur_user)->username, 0, 0, 0};
 		for (int i = 0; i < set.problems && i < strlen(alphabet) - 1; i++) {
+			stat.problem = alphabet[i];
 			char *user_file_path = generate_file_path(contest_name, 
 				alphabet[i]);
 			char *output_path = generate_output_path(contest_name, alphabet[i]);
@@ -437,13 +484,17 @@ void run_tests(char *contest_name, UserInfo **user_list, Settings set,
 			int status = 0;
 			wait(&status);
 			//printf("Status: %d\n", status);
-			if (WEXITSTATUS(status) != 0) {
+			int wstat = WEXITSTATUS(status);
+			if (wstat != 0) {
 				puts("Tests stopped.");
 				write_log("Tests stopped.");
 				clear_var_dir(alphabet);
 				exit(1);
 			}
-			char child_answer = get_answer(contest_name, (*cur_user)->username, alphabet[i]);
+			char child_answer = get_answer(contest_name, (*cur_user)->username, 
+				alphabet[i], &stat);
+			print_stat(stat);
+			free(stat.results);
 			result[i] = child_answer;
 			free(user_file_path);
 			free(output_path);
@@ -511,24 +562,25 @@ void generate_results_file(UserInfo **user_list, Settings set,
 {
 	int list_size = get_list_size(user_list);
 	qsort(user_list, list_size, sizeof(UserInfo *), comp);
-	printf("\nResults:\n");
+	// len = 25
+	printf("\n%s--------Results:--------%s\n", CYAN, RESET);
 	FILE *csv = fopen("results.csv", "w");
 	if (csv == NULL) {
 		perror("Failed to open results.csv");
 		exit(1);
 	}
 	fprintf(csv, "user,");
-	printf("%-15s", "user");
+	printf("%s%-15s", GREEN, "user");
 	for (int i = 0; i < set.problems; i++) {
 		fprintf(csv, "%c,", alphabet[i]);
 		printf("%-2c", alphabet[i]);
 	}
 	fprintf(csv, "Sum\n");
-	printf("%-4s\n", "Sum");
+	printf("%-4s%s\n", "Sum", RESET);
 	for (int i = 0; user_list[i]; i++) {
 		UserInfo *user = user_list[i];
 		fprintf(csv, "%s,", user->username);
-		printf("%-15s", user->username);
+		printf("%s%-15s%s", YELLOW, user->username, RESET);
 		for (int j = 0; j < set.problems; j++) {
 			printf("%-2c", (user->results)[j]);
 			fprintf(csv, "%c,", (user->results)[j]);
@@ -537,6 +589,7 @@ void generate_results_file(UserInfo **user_list, Settings set,
 		fprintf(csv, "%d\n", user->sum);
 	}
 	fclose(csv);
+	putchar('\n');
 }
 
 void create_directories()
@@ -546,6 +599,23 @@ void create_directories()
 	mkdir("var", mode);
 	mkdir("log", mode);
 	write_log("OK.\n");
+}
+
+void say_hello()
+{
+	const int width = 80;
+	char text[] = "Welcome to Judge!";
+	int left = (width - sizeof(text)) / 2;
+	putchar('\n');
+	for (int i = 0; i < width; i++)
+		putchar('-');
+	puts("");
+	for (int i = 0; i < left; i++)
+		putchar(' ');
+	printf("%sWelcome to %sJudge!%s\n", YELLOW, RED, RESET);
+	for (int i = 0; i < width; i++)
+		putchar('-');
+	puts("\n");
 }
 
 int main(int argc, char *args[]){
@@ -562,6 +632,7 @@ int main(int argc, char *args[]){
 	create_directories();
 	Settings set = init_settings(contest_name);
 	UserInfo **user_list = get_user_list(contest_name);
+	say_hello();
 	print_settings(set);
 	print_list(user_list);
 	run_tests(contest_name, user_list, set, alphabet);
