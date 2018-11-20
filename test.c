@@ -166,7 +166,6 @@ void launch_program(int * pipe_chanel, char * program_name, int i, char * progra
         test_name = set_test_name(i, program_tests);
         fd = open(test_name, O_RDWR);
         if (fd < 0) {
-            perror("Error open test");
             exit(1);
         }
         if (dup2(fd, 0) < 0) {
@@ -231,7 +230,7 @@ void write_num(int a, int fd) {
     }
 }
 
-// log status = 10: не открылся dat файл
+// log status = 1: не открылся dat файл
 // status = 2: не запустилась программа
 // status = 3: проблема с checker / файлом ans
 // status = 4: программа не выдала ответ
@@ -239,7 +238,7 @@ void write_num(int a, int fd) {
 
 void write_status(Logfile log, int fd) {
     switch(log.status) {
-        case 10:
+        case 1:
             write(fd, "dat file error", strlen("dat file error"));
             break;
         case 2:
@@ -314,11 +313,12 @@ void check_wstat_checker(int wstatus2, Logfile * log, char * log_name) {
     }
 }
 
-void check_wstat_prog(int wstatus1, Logfile * log, char * log_name) {
+int check_wstat_prog(int wstatus1, Logfile * log, char * log_name) {
     if (WEXITSTATUS(wstatus1) == 1) { // не открылся .dat файл
-        log -> status = 10;
+        log -> status = 1;
         write_log(*log, log_name);
-        exit(10);
+        putchar('?');
+        return 1;
     }
     if (WEXITSTATUS(wstatus1) == 2) { // Не запустилась программа
         putchar('x');
@@ -326,6 +326,7 @@ void check_wstat_prog(int wstatus1, Logfile * log, char * log_name) {
         write_log(*log, log_name);
         exit(0);
     }
+    return 0;
 }
 
 void launch_tests(char * program_name, char * program_tests, Settings set, char * log_name) {
@@ -333,11 +334,12 @@ void launch_tests(char * program_name, char * program_tests, Settings set, char 
     //print_log(log);
     int pipe_chanel[2], wstatus1, wstatus2;
     for (int i = 1; i <= set.tests; i++) {
+        //printf("%d\n", i);
         init_log(&log, program_name, i);
         pipe(pipe_chanel);
         launch_program(pipe_chanel, program_name, i, program_tests);
-        close(pipe_chanel[1]);
         wait(&wstatus1);
+        close(pipe_chanel[1]);
         check_wstat_prog(wstatus1, &log, log_name);
         char * correct_ans = correct_ans_name(i, program_tests);
         launch_checker(set, pipe_chanel, correct_ans);
