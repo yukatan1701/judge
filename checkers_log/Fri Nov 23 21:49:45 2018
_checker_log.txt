@@ -1,0 +1,15 @@
+start
+ans file: contest/tests/A/1.ans
+status: OK
+finish
+
+start
+ans file: contest/tests/A/2.ans
+status: OK
+finish
+
+start
+ans file: contest/tests/A/3.ans
+status: OK
+finish
+

@@ -333,7 +333,6 @@ void launch_tests(char * program_name, char * program_tests, Settings set, char 
     //print_log(log);
     int pipe_chanel[2], wstatus1, wstatus2;
     for (int i = 1; i <= set.tests; i++) {
-        //printf("%d\n", i);
         init_log(&log, program_name, i);
         pipe(pipe_chanel);
         launch_program(pipe_chanel, program_name, i, program_tests);
@@ -344,7 +343,8 @@ void launch_tests(char * program_name, char * program_tests, Settings set, char 
         launch_checker(set, pipe_chanel, correct_ans);
         wait(&wstatus2);
         check_wstat_checker(wstatus2, &log, log_name);
-        putchar('\n');
+        fflush(stdout);
+        //putchar('\n');
         write_log(log, log_name);
     }
     puts("");

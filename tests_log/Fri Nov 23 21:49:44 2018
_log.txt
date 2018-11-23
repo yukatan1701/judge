@@ -1,0 +1,18 @@
+start
+problem: full_contest/code/user1/A
+test num: 1
+status: OK
+finish
+
+start
+problem: full_contest/code/user1/A
+test num: 2
+status: OK
+finish
+
+start
+problem: full_contest/code/user1/A
+test num: 3
+status: OK
+finish
+
