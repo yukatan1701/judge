@@ -180,7 +180,6 @@ void launch_program(int * pipe_chanel, char * program_name, int i, char * progra
         close(pipe_chanel[1]);
         free(test_name);
         if (execl(program_name, program_name, NULL) < 0) {
-            perror("Fail to open program");
             exit(2);
         }
     }
