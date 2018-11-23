@@ -21,6 +21,7 @@
 typedef struct settings {
 	int problems;
 	char *score;
+	int factor;
 } Settings;
 
 typedef struct user_info {
@@ -115,8 +116,17 @@ void print_settings(Settings set)
 	FILE *log = open_log();
 	fprintf(log, "Current settings:\n");
 	fprintf(log, "problems: %d\n", set.problems);
-	fprintf(log, "score: %s\n\n", set.score);
+	fprintf(log, "score: %s\n", set.score);
+	fprintf(log, "factor: %d\n\n", set.factor);
 	fclose(log);
+}
+
+void print_settings_terminal(Settings set)
+{
+	printf("Current settings:\n");
+	printf("problems: %d\n", set.problems);
+	printf("score: %s\n", set.score);
+	printf("factor: %d\n\n", set.factor);
 }
 
 char *copy_string(char *value)
@@ -133,9 +143,33 @@ char *copy_string(char *value)
 void put_data(Settings *set, char *key, char *value)
 {
 	if (strcmp(key, "problems") == 0) {
-		set->problems = atoi(value);
+		int new_val = atoi(value);
+		if (new_val < 1) {
+			puts("Problems count is too short (min = 1). Terminate.");
+			write_log("Problems count is too short.");
+			exit(1);
+		} else if (new_val > 26) {
+			puts("Problems count is too long (max = 26). Terminate.");
+			write_log("Problems count is too long.");
+			exit(1);
+		} else {
+			set->problems = new_val;
+		}
 	} else if (strcmp(key, "score") == 0) {
 		set->score = copy_string(value);
+	} else if (strcmp(key, "factor") == 0) {
+		int new_val = atoi(value);
+		if (new_val < 1) {
+			puts("Factor is too short (min = 1). Terminate.");
+			write_log("Problems count is too short.");
+			exit(1);
+		} else if (new_val > 1000) {
+			puts("Factor is too long (max = 1000). Terminate.");
+			write_log("Problems count is too long.");
+			exit(1);
+		} else {
+			set->factor = new_val;
+		}
 	}
 }
 
@@ -143,12 +177,21 @@ Settings read_settings(FILE *file)
 {
 	Settings set;
 	char c = 0;
+	int byte_len = 0;
 	while (c != EOF) {
+		//printf("[%d %d]", byte_len, c);
 		int i = 0;
 		char *key = NULL, *value = NULL;
 		char **current_field = &key;
 		int was_equal = 0;
 		c = fgetc(file);
+		if (c == ' ') {
+			continue;
+		}
+		if ((c == EOF || c == '\n') && byte_len == 0) {
+			invalid_format();
+		}
+		byte_len++;
 		while (c != '\n' && c != EOF) {
 			if (c == ' ') {
 				c = fgetc(file);
@@ -183,6 +226,9 @@ Settings read_settings(FILE *file)
 		put_data(&set, key, value);
 		free(key);
 		free(value);
+	}
+	if (byte_len == 0) {
+		invalid_format();
 	}
 	return set;
 }
@@ -329,7 +375,7 @@ char *generate_output_path(char *contest_name, char letter)
 }
 
 void answer_to_file(char *contest_name, char *username, char *answer, 
-	char letter)
+                    char letter)
 {
 	static const int slashes_count = 3;
 	static const char res[] = "results.txt";
@@ -364,8 +410,20 @@ char get_answer(char *contest_name, char *username, char letter, Stat *stat)
 		ans[size + 1] = 0;
 		size++;
 	}
+	if (size == 0) {
+		printf("WARNING: No test entries for problem %c.\n", letter);
+		FILE *log = open_log();
+		fprintf(log, "WARNING: No test entries for problem %c.\n", letter);
+		fclose(log);
+		ans = malloc(2);
+		if (ans == NULL)
+			allocation_error();
+		ans[0] = 'x';
+		ans[1] = 0;
+		size++;
+	}
 	answer_to_file(contest_name, username, ans, letter);
-	int plus = 0, minus = 0, x = 0, failed = 0;
+	int plus = 0, minus = 0, x = 0;
 	stat->tested = 0;
 	stat->failed = 0;
 	for (int i = 0; i < size; i++) {
@@ -374,19 +432,12 @@ char get_answer(char *contest_name, char *username, char letter, Stat *stat)
 			plus++;
 		else if (ans[i] == '-')
 			minus++;
-		else if (ans[i] == 'x') {
-			stat->failed++;
+		else {
 			x++;
-		}else {
-			printf("Warning: test %d is broken. Ignore it.\n", i + 1);
-			stat->failed++;
-			stat->tested--;
-			failed++;
 		}
 	}
+	stat->failed = x;
 	stat->results = ans;
-	if (x == 0 && plus == 0 && minus == 0 && failed != 0)
-		return '?';
 	if (x != 0)
 		return 'x';
 	if (plus != 0 && minus == 0)
@@ -395,22 +446,19 @@ char get_answer(char *contest_name, char *username, char letter, Stat *stat)
 }
 
 void compile_user_codes(char *contest_name, char *username, Settings set, 
-	const char alphabet[])
+                        const char alphabet[])
 {
 	const int path_len = sizeof("var/") + sizeof("");
 	char path[path_len + 1];
-	//char filename[2] = {0, 0};
 	for (int i = 0; i < set.problems; i++) {
 		char letter = alphabet[i];
 		char *code = generate_code_path(contest_name, username, letter);
 		memset(path, 0, path_len + 1);
 		sprintf(path, "var/%c", letter);
-		//printf("Try to compile: FROM: %s TO: %s\n", code, path);
 		FILE *log = open_log();
 		fprintf(log, "Compiling: %c.c... ", letter);
 		fclose(log);
 		if (fork() == 0) {
-			//filename[0] = letter;
 			close(2);
 			if (execlp("gcc", "gcc", code, "-o", path, NULL) < 0) {
 				perror("Failed to compile user program");
@@ -441,7 +489,7 @@ void clear_var_dir(const char alphabet[])
 }
 
 void run_tests(char *contest_name, UserInfo **user_list, Settings set, 
-	const char alphabet[])
+               const char alphabet[])
 {
 	write_log("\n\nChecking user programs...");
 	int user_num = 0;
@@ -483,16 +531,22 @@ void run_tests(char *contest_name, UserInfo **user_list, Settings set,
 			close(fd[0]);
 			int status = 0;
 			wait(&status);
-			//printf("Status: %d\n", status);
+			log = open_log();
+			fprintf(log, "Status: %d\n", status);
+			fclose(log);
 			int wstat = WEXITSTATUS(status);
 			if (wstat != 0) {
 				puts("Tests stopped.");
 				write_log("Tests stopped.");
+				if (wstat == 10) {
+					puts("Some test is broken. Next tests will be ignored.");
+					write_log("Some test is broken. Next tests will be ignored.");
+				}
 				clear_var_dir(alphabet);
 				exit(1);
 			}
 			char child_answer = get_answer(contest_name, (*cur_user)->username, 
-				alphabet[i], &stat);
+			                    alphabet[i], &stat);
 			print_stat(stat);
 			free(stat.results);
 			result[i] = child_answer;
@@ -521,12 +575,28 @@ void free_users_info(UserInfo **user_list)
 	free(user_list);
 }
 
-int get_sum(char *result, char *sum_type)
+int get_sum(char *result, Settings set)
 {
+	char *sum_type = set.score;
+	int mult = set.factor;
 	int sum = 0;
-	for (int i = 0; result[i]; i++) {
-		if (result[i] == '+')
-			sum++;
+	if (strcmp(sum_type, "sum") == 0) {
+		for (int i = 0; result[i]; i++) {
+			if (result[i] == '+')
+				sum++;
+		}
+	} else if (strcmp(sum_type, "diff") == 0) {
+		for (int i = 0; result[i]; i++) {
+			if (result[i] == '+')
+				sum += mult * (i + 1);
+		}
+	} else {
+		puts("WARNING: score type is undefined. Default (sum) type will be used.");
+		write_log("WARNING: score type is undefined. Default (sum) type will be used.");
+		for (int i = 0; result[i]; i++) {
+			if (result[i] == '+')
+				sum++;
+		}
 	}
 	return sum;
 }
@@ -545,7 +615,6 @@ int comp(const void *void_one, const void *void_two)
 	UserInfo **two = (UserInfo **) void_two;
 	int sum1 = (*one)->sum;
 	int sum2 = (*two)->sum;
-	//printf("%s %s\n", name1, name2);
 	return -(sum1 - sum2);
 }
 
@@ -553,19 +622,19 @@ void calculate_results(UserInfo **user_list, Settings set)
 {
 	for (int i = 0; user_list[i]; i++) {
 		UserInfo *user = user_list[i];
-		user->sum = get_sum(user->results, set.score);
+		user->sum = get_sum(user->results, set);
 	}
 }
 
 void generate_results_file(UserInfo **user_list, Settings set, 
-	const char alphabet[])
+                           const char alphabet[])
 {
 	int list_size = get_list_size(user_list);
 	qsort(user_list, list_size, sizeof(UserInfo *), comp);
-	// len = 25
 	printf("\n%s--------Results:--------%s\n", CYAN, RESET);
 	FILE *csv = fopen("results.csv", "w");
 	if (csv == NULL) {
+		write_log("Failed to open results.csv");
 		perror("Failed to open results.csv");
 		exit(1);
 	}
@@ -589,6 +658,7 @@ void generate_results_file(UserInfo **user_list, Settings set,
 		fprintf(csv, "%d\n", user->sum);
 	}
 	fclose(csv);
+	write_log("results.csv is created.");
 	putchar('\n');
 }
 
@@ -596,8 +666,23 @@ void create_directories()
 {
 	write_log("Creating directories...");
 	int mode = S_IRWXU;
-	mkdir("var", mode);
-	mkdir("log", mode);
+	int res;
+	errno = 0;
+	if ((res = mkdir("var", mode)) != 0) {
+		if (errno != EEXIST) {
+			perror("Failed to create var directory");
+			write_log("Failed to create var directory.");
+			exit(1);
+		}
+	}
+	errno = 0;
+	if ((res = mkdir("log", mode)) != 0) {
+		if (errno != EEXIST) {
+			perror("Failed to create log directory");
+			write_log("Failed to create log directory.");
+			exit(1);
+		}
+	}
 	write_log("OK.\n");
 }
 
@@ -634,11 +719,13 @@ int main(int argc, char *args[]){
 	UserInfo **user_list = get_user_list(contest_name);
 	say_hello();
 	print_settings(set);
+	//print_settings_terminal(set);
 	print_list(user_list);
 	run_tests(contest_name, user_list, set, alphabet);
 	calculate_results(user_list, set);
 	generate_results_file(user_list, set, alphabet);
 	free_settings(set);
 	free_users_info(user_list);
+	write_log("End.");
 	return 0;
 }
