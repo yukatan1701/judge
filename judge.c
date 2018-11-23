@@ -395,7 +395,8 @@ void answer_to_file(char *contest_name, char *username, char *answer,
 	fclose(res_file);
 }
 
-char get_answer(char *contest_name, char *username, char letter, Stat *stat)
+char get_answer(char *contest_name, char *username, char letter, Stat *stat, 
+                int wstat)
 {
 	char *ans = NULL;
 	int size = 0;
@@ -409,6 +410,11 @@ char get_answer(char *contest_name, char *username, char letter, Stat *stat)
 		ans[size] = ch;
 		ans[size + 1] = 0;
 		size++;
+	}
+	/* OK */
+	if (wstat == 10) {
+		size >>= 1;
+		memset(ans + size, 0, size);
 	}
 	if (size == 0) {
 		printf("WARNING: No test entries for problem %c.\n", letter);
@@ -532,21 +538,23 @@ void run_tests(char *contest_name, UserInfo **user_list, Settings set,
 			int status = 0;
 			wait(&status);
 			log = open_log();
-			fprintf(log, "Status: %d\n", status);
+			fprintf(log, "Status: %d\n", WEXITSTATUS(status));
 			fclose(log);
 			int wstat = WEXITSTATUS(status);
+			//printf("Status: %d\n", wstat);
 			if (wstat != 0) {
 				puts("Tests stopped.");
 				write_log("Tests stopped.");
 				if (wstat == 10) {
-					puts("Some test is broken. Next tests will be ignored.");
+					puts("WARNING: Some test is broken. Next tests will be ignored.");
 					write_log("Some test is broken. Next tests will be ignored.");
+				} else { 
+					clear_var_dir(alphabet);
+					exit(1);
 				}
-				clear_var_dir(alphabet);
-				exit(1);
 			}
 			char child_answer = get_answer(contest_name, (*cur_user)->username, 
-			                    alphabet[i], &stat);
+			                    alphabet[i], &stat, wstat);
 			print_stat(stat);
 			free(stat.results);
 			result[i] = child_answer;
