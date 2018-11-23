@@ -166,6 +166,7 @@ void launch_program(int * pipe_chanel, char * program_name, int i, char * progra
         test_name = set_test_name(i, program_tests);
         fd = open(test_name, O_RDWR);
         if (fd < 0) {
+            close(pipe_chanel[1]);
             exit(1);
         }
         if (dup2(fd, 0) < 0) {
@@ -230,7 +231,7 @@ void write_num(int a, int fd) {
     }
 }
 
-// log status = 1: не открылся dat файл
+// log status = 10: не открылся dat файл
 // status = 2: не запустилась программа
 // status = 3: проблема с checker / файлом ans
 // status = 4: программа не выдала ответ
@@ -238,7 +239,7 @@ void write_num(int a, int fd) {
 
 void write_status(Logfile log, int fd) {
     switch(log.status) {
-        case 1:
+        case 10:
             write(fd, "dat file error", strlen("dat file error"));
             break;
         case 2:
@@ -315,10 +316,9 @@ void check_wstat_checker(int wstatus2, Logfile * log, char * log_name) {
 
 int check_wstat_prog(int wstatus1, Logfile * log, char * log_name) {
     if (WEXITSTATUS(wstatus1) == 1) { // не открылся .dat файл
-        log -> status = 1;
+        log -> status = 10;
         write_log(*log, log_name);
-        putchar('?');
-        return 1;
+        exit(10);
     }
     if (WEXITSTATUS(wstatus1) == 2) { // Не запустилась программа
         putchar('x');
@@ -345,6 +345,7 @@ void launch_tests(char * program_name, char * program_tests, Settings set, char 
         launch_checker(set, pipe_chanel, correct_ans);
         wait(&wstatus2);
         check_wstat_checker(wstatus2, &log, log_name);
+        putchar('\n');
         write_log(log, log_name);
     }
     puts("");
