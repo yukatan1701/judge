@@ -34,26 +34,32 @@ void print_settings(Settings set) {
 	printf("checker: %s\n", set.checker);
 }
 
-void put_data(Settings *set, char *key, char *value) {
+char *copy_string(char *value)
+{
+	int len = strlen(value);
+	char *score = malloc(sizeof(char) * (len + 1));
+	if (score == NULL)
+		allocation_error();
+	memset(score, 0, len + 1);
+	memcpy(score, value, len);
+	return score;
+}
+
+void put_data(Settings *set, char *key, char *value)
+{
 	if (strcmp(key, "tests") == 0) {
-	    if (strlen(value) > 6)  {
-	        invalid_format();
-	        exit(1);
-	    }
-		(*set).tests = atoi(value);
+		int new_val = atoi(value);
+		if (new_val < 1) {
+			fprintf(stderr, "Tests count is wrong. Terminate.");
+			exit(1);
+		} else if (new_val > 10000) {
+			fprintf(stderr, "Tests count is wrong (max = 10000). Terminate.");
+			exit(1);
+		} else {
+			set->tests = new_val;
+		}
 	} else if (strcmp(key, "checker") == 0) {
-		int len = strlen(value);
-		char *checker = malloc(sizeof(char) * (len + 1));
-		if (checker == NULL)
-			allocation_error();
-		memset(checker, 0, len + 1);
-		memcpy(checker, value, len);
-		if (strcmp("checker_int", value) == 0 || strcmp("checker_byte", value) == 0) {
-		    (*set).checker = checker;
-        } else {
-            invalid_format();
-	        exit(1);
-        }
+		set-> checker = copy_string(value);
 	}
 }
 
@@ -180,6 +186,7 @@ void launch_program(int * pipe_chanel, char * program_name, int i, char * progra
         close(pipe_chanel[1]);
         free(test_name);
         if (execl(program_name, program_name, NULL) < 0) {
+            perror("Fail to open program");
             exit(2);
         }
     }
@@ -333,6 +340,7 @@ void launch_tests(char * program_name, char * program_tests, Settings set, char 
     //print_log(log);
     int pipe_chanel[2], wstatus1, wstatus2;
     for (int i = 1; i <= set.tests; i++) {
+        //printf("%d\n", i);
         init_log(&log, program_name, i);
         pipe(pipe_chanel);
         launch_program(pipe_chanel, program_name, i, program_tests);
@@ -343,8 +351,7 @@ void launch_tests(char * program_name, char * program_tests, Settings set, char 
         launch_checker(set, pipe_chanel, correct_ans);
         wait(&wstatus2);
         check_wstat_checker(wstatus2, &log, log_name);
-        fflush(stdout);
-        //putchar('\n');
+        putchar('\n');
         write_log(log, log_name);
     }
     puts("");
